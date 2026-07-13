@@ -1,0 +1,24 @@
+{
+  "name": "ST足計測アプリ",
+  "short_name": "足計測",
+  "description": "A4用紙を基準に足のサイズを正確に計測するアプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030712",
+  "theme_color": "#1d4ed8",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

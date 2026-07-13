@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.manus/
+.manus-logs/
+*.log
+.env
+.env.local
+patches/
+pnpm-lock.yaml
+.project-config.json
+__manus__/
+client/public/__manus__/
