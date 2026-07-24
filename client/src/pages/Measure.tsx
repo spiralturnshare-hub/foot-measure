@@ -348,7 +348,7 @@ export default function Measure() {
   const [imageRotation, setImageRotation] = useState<0 | 90 | 180 | 270>(0);
   const [customerName, setCustomerName] = useState("");
   const [notes, setNotes] = useState("");
-  // 顧客・注文情報（スパベースから自動入力、手動入力も可）
+  // 顧客・注文情報（自動入力・手動入力可）
   const [insoleSize, setInsoleSize] = useState("");
   const [shoeSize, setShoeSize] = useState("");
   const [shoeBrand, setShoeBrand] = useState("");
@@ -1629,9 +1629,9 @@ export default function Measure() {
                 rows={2}
               />
             </div>
-            {/* 注文情報（スパベースから自動入力、手動入力も可） */}
+            {/* 注文情報（自動入力・手動入力可） */}
             <div className="pt-1 border-t border-gray-800">
-              <p className="text-xs text-gray-500 mb-2">注文情報（スパベースから自動入力・手動入力可）</p>
+              <p className="text-xs text-gray-500 mb-2">注文情報（自動入力・手動入力可）</p>
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-gray-400 text-xs">中底サイズ</Label>
