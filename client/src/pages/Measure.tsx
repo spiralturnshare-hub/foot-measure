@@ -340,7 +340,15 @@ export default function Measure() {
 
   // ---- すべてはhooksを早期返りより前に定義 -----
   const [step, setStep] = useState<Step>("upload");
-  const [measurementId, setMeasurementId] = useState<number | null>(null);
+  // URLパラメータからの顧客・組織情報取得（customer-mgmt-consoleからのアクセス対応）
+  const { customerId, organizationId } = useMemo(() => {
+    const params = new URLSearchParams(search);
+    return {
+      customerId: params.get('customerId') ?? undefined,
+      organizationId: params.get('organizationId') ?? undefined,
+    };
+  }, [search]);
+  const [measurementId, setMeasurementId] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageWidth, setImageWidth] = useState(0);
   const [imageHeight, setImageHeight] = useState(0);
@@ -485,11 +493,11 @@ export default function Measure() {
   const readjustId = (() => {
     const params = new URLSearchParams(search);
     const v = params.get('readjust');
-    return v ? parseInt(v, 10) : null;
+    return v ?? null;
   })();
   const { data: readjustData } = trpc.measurements.getById.useQuery(
-    { id: readjustId ?? 0 },
-    { enabled: readjustId != null && readjustId > 0 }
+    { id: readjustId ?? '00000000-0000-0000-0000-000000000000' },
+    { enabled: readjustId != null && readjustId.length > 0 }
   );
 
   // 再調整データが取得できたら状態を復元する
@@ -665,6 +673,8 @@ export default function Measure() {
           const runUpload = async () => {
             try {
               const { id } = await createMutation.mutateAsync({
+                customerId: customerId,
+                organizationId: organizationId,
                 customerName: customerName || undefined,
                 notes: notes || undefined,
                 insoleSize: insoleSize || undefined,
