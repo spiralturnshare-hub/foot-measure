@@ -34,7 +34,13 @@ export async function signOut(): Promise<void> {
 }
 
 // ============================================================
-// measurements テーブル操作
+// ⚠️ 注意: 以下の関数群はデッドコード（未使用）です。
+// 実際のデータアクセスはすべてtRPC経由（server/supabaseAdmin.ts）で行われています。
+// Green Supabaseの実テーブル名は 'foot_measurements' です（'measurements'は存在しません）。
+// measurement_logsテーブルも存在しません。
+// これらの関数を使用する場合は、テーブル名を 'foot_measurements' に変更してください。
+// ============================================================
+// [DEAD CODE] measurements テーブル操作（実テーブル名: foot_measurements）
 // ============================================================
 export interface MeasurementRow {
   id: string;
