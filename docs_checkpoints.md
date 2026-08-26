@@ -21,7 +21,7 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - 内容: tRPC+Express+Drizzle+Manus Forge Storageというフルスタック構成のまま、`vercel.json`だけが静的サイト用(`framework: vite`)になっていたため、本番では`/api/trpc/*`が全てindex.htmlにフォールバックし、計測データの保存が一切動作していなかった状態。加えて`measurementsRouter`が全プロシージャpublicProcedure(未認証で読み書き・削除可能)だった。このコミットまでは実測確認済みの不具合を抱えたまま。
 
 ### CP1 (2026-08-26 tRPC/Express/Manus依存を排除し、Supabase直叩き構成へ全面移行)
-- コミット: (このワークツリーでのコミット後にここへ追記)
+- コミット: `e7ba2d0`
 - Vercel Production: 未デプロイ(本人レビュー後にpush/デプロイ判断のため、このチェックポイント時点ではVercelへの反映なし)
 - 内容:
   - `server/`ディレクトリ全体(routers.ts, supabaseAdmin.ts, storage.ts, storageProxy.ts, oauth.ts, db.ts, _core/*, テスト含む)を削除。tRPC/Express/Manus Forge Storage依存を完全に排除。
