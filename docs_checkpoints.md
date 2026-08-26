@@ -38,7 +38,7 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
   - `Home.tsx`/`Measure.tsx`が参照していた`/manus-storage/spiral-turn-logo_...webp`と`/manus-storage/foot-template-v3_...png`(足の図テンプレート画像)は、旧`server/_core/storageProxy.ts`(Manus Forge S3への307リダイレクト)経由でのみ配信されていた。このExpressルートも本番のVercel設定では元々機能しておらず(CP0時点で既に静的サイト化されていたため)、これらの画像は**移行前から本番で404していた可能性が高い**。今回のserver/削除でこの導線も完全になくなるため、画像の実体データ(本人が別途提供予定)が届き次第、`client/public/`の該当ファイルを差し替えること。
 
 ### CP2 (2026-08-26 画像アセットの暫定プレースホルダー対応)
-- コミット: (このコミット後に追記)
+- コミット: `4ae8cb9`
 - 内容: CP1で404のまま残っていた2つの画像参照を、`/manus-storage/...`から`client/public/`配下の自前SVGプレースホルダーに差し替え、フェッチ失敗が起きない状態にした。
   - `client/public/spiral-turn-logo.svg`(ヘッダーロゴ、ブランドピンク`#D62598`でテキスト表示のみ)
   - `client/public/foot-template.svg`(計測結果画面の「足の図」背景テンプレート。`drawFootDiagram`関数が座標をハードコードで前提にしている元PNGサイズ1475×1751に合わせてSVGのwidth/heightを設定し、「テンプレート画像 準備中」と表示)
