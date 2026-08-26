@@ -1091,7 +1091,7 @@ export default function Measure() {
       try {
         let img = templateImgRef.current;
         if (!img) {
-          const templateUrl = '/manus-storage/foot-template-v3_131fc459.png';
+          const templateUrl = '/foot-template.svg';
           const fetchResp = await fetch(templateUrl);
           if (!fetchResp.ok) throw new Error('テンプレート画像の取得に失敗');
           const blob = await fetchResp.blob();
@@ -1122,7 +1122,7 @@ export default function Measure() {
     try {
       let img = templateImgRef.current;
       if (!img) {
-        const templateUrl = '/manus-storage/foot-template-v3_131fc459.png';
+        const templateUrl = '/foot-template.svg';
         const fetchResp = await fetch(templateUrl);
         if (!fetchResp.ok) throw new Error('テンプレート画像の取得に失敗しました');
         const blob = await fetchResp.blob();
@@ -1184,7 +1184,7 @@ export default function Measure() {
             <ChevronLeft className="w-5 h-5" />
           </Button>
           <img
-            src="/manus-storage/spiral-turn-logo_65a20439.webp"
+            src="/spiral-turn-logo.svg"
             alt="SPIRAL TURN"
             className="h-5 md:h-8 w-auto object-contain flex-shrink-0"
           />

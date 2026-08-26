@@ -34,5 +34,12 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
   - `client/src/main.tsx`から`trpc.Provider`/`QueryClientProvider`/`httpBatchLink`を削除し、`<App />`を直接レンダーするだけに簡素化(PWA Service Worker登録は維持)。
   - `package.json`のscriptsを姉妹アプリと同じ形(`dev`/`build`/`start`/`preview`/`check`/`format`)に統一し、`test`/`db:push`を削除。使われなくなった依存関係(`express`, `@trpc/server`, `@trpc/client`, `@trpc/react-query`, `@tanstack/react-query`, `drizzle-orm`, `drizzle-kit`, `mysql2`, `dotenv`, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`, `@types/express`, `tsx`)を削除。
   - `npm run check`(tsc --noEmit)・`npm run build`(vite build)ともに成功を確認済み。既存の自動テストはすべて`server/**`配下(削除対象そのもの)にのみ存在しており、対象コード(`MeasurementWidget.tsx`/`measurementEngine.ts`)側の既存テストは元々無かったため、`npm run test`に相当するテストは今回の変更後は存在しない。
-- **未解決・要フォローアップ(本人確認が必要)**:
-  - `Home.tsx`/`Measure.tsx`が参照している`/manus-storage/spiral-turn-logo_...webp`と`/manus-storage/foot-template-v3_...png`(足の図テンプレート画像)は、旧`server/_core/storageProxy.ts`(Manus Forge S3への307リダイレクト)経由でのみ配信されていた。このExpressルートも本番のVercel設定では元々機能しておらず(CP0時点で既に静的サイト化されていたため)、これらの画像は**移行前から本番で404していた可能性が高い**。今回のserver/削除でこの导线も完全になくなるため、正常表示させるには、この2枚の画像ファイルをSupabase Storageまたは`client/public/`に配置し直し、参照URLを更新する追加作業が別途必要(画像の実体データを保有していないため今回のタスク範囲では対応不可)。
+- **画像アセット未解決(2026-08-26 CP2で暫定対応済み、下記参照)**:
+  - `Home.tsx`/`Measure.tsx`が参照していた`/manus-storage/spiral-turn-logo_...webp`と`/manus-storage/foot-template-v3_...png`(足の図テンプレート画像)は、旧`server/_core/storageProxy.ts`(Manus Forge S3への307リダイレクト)経由でのみ配信されていた。このExpressルートも本番のVercel設定では元々機能しておらず(CP0時点で既に静的サイト化されていたため)、これらの画像は**移行前から本番で404していた可能性が高い**。今回のserver/削除でこの導線も完全になくなるため、画像の実体データ(本人が別途提供予定)が届き次第、`client/public/`の該当ファイルを差し替えること。
+
+### CP2 (2026-08-26 画像アセットの暫定プレースホルダー対応)
+- コミット: (このコミット後に追記)
+- 内容: CP1で404のまま残っていた2つの画像参照を、`/manus-storage/...`から`client/public/`配下の自前SVGプレースホルダーに差し替え、フェッチ失敗が起きない状態にした。
+  - `client/public/spiral-turn-logo.svg`(ヘッダーロゴ、ブランドピンク`#D62598`でテキスト表示のみ)
+  - `client/public/foot-template.svg`(計測結果画面の「足の図」背景テンプレート。`drawFootDiagram`関数が座標をハードコードで前提にしている元PNGサイズ1475×1751に合わせてSVGのwidth/heightを設定し、「テンプレート画像 準備中」と表示)
+  - 本人から実画像(ロゴ・足の図テンプレート)を受け取り次第、同じファイルパスの中身を差し替えるだけで反映される(コード変更不要)。
