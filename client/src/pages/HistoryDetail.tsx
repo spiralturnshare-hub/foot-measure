@@ -2,9 +2,9 @@
  * 計測詳細ページ
  */
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { fetchMeasurementById, type FootMeasurementRow } from "@/lib/supabase";
 import MeasurementWidget, { type MeasurementMode } from "@/components/MeasurementWidget";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,12 +25,30 @@ import type { MeasurementPoints } from "../../../shared/measurementTypes";
 export default function HistoryDetail() {
   const [, navigate] = useLocation();
   const params = useParams<{ id: string }>();
-  const id = parseInt(params.id ?? "0");
+  const id = params.id ?? "";
 
-  const { data: measurement, isLoading } = trpc.measurements.getById.useQuery(
-    { id },
-    { enabled: id > 0 }
-  );
+  const [measurement, setMeasurement] = useState<FootMeasurementRow | null | undefined>(undefined);
+  const isLoading = measurement === undefined;
+
+  useEffect(() => {
+    if (!id) {
+      setMeasurement(null);
+      return;
+    }
+    let cancelled = false;
+    setMeasurement(undefined);
+    fetchMeasurementById(id)
+      .then((data) => {
+        if (!cancelled) setMeasurement(data);
+      })
+      .catch((err) => {
+        console.error(err);
+        if (!cancelled) setMeasurement(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
 
   if (isLoading) {
     return (
@@ -51,15 +69,15 @@ export default function HistoryDetail() {
     );
   }
 
-  // pointsJsonは旧形式（MeasurementPoints直接）または新形式（{standard, bunion}）のどちらかを取りうる
-  const rawPj = measurement.pointsJson as { standard?: MeasurementPoints; bunion?: MeasurementPoints } | MeasurementPoints | null;
+  // points_jsonは旧形式（MeasurementPoints直接）または新形式（{standard, bunion}）のどちらかを取りうる
+  const rawPj = measurement.points_json as { standard?: MeasurementPoints; bunion?: MeasurementPoints } | MeasurementPoints | null;
   const points: MeasurementPoints | null = rawPj
     ? ('standard' in rawPj && rawPj.standard
         ? rawPj.standard as MeasurementPoints
         : ('point1' in rawPj ? rawPj as MeasurementPoints : null))
     : null;
-  const regression = measurement.regressionResultJson as Record<string, unknown> | null;
-  const date = new Date(measurement.createdAt);
+  const regression = measurement.regression_result_json as Record<string, unknown> | null;
+  const date = new Date(measurement.created_at);
   const dateStr = date.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "long",
@@ -81,7 +99,7 @@ export default function HistoryDetail() {
           <ChevronLeft className="w-5 h-5" />
         </Button>
         <h1 className="text-lg font-bold flex-1">
-          {measurement.customerName || "計測詳細"}
+          {measurement.customer_name || "計測詳細"}
         </h1>
         <Badge
           className={
@@ -92,7 +110,7 @@ export default function HistoryDetail() {
         >
           {measurement.status === "completed" ? "完了" : "下書き"}
         </Badge>
-        {measurement.imageUrl && (
+        {measurement.image_url && (
           <Button
             size="sm"
             variant="outline"
@@ -113,10 +131,10 @@ export default function HistoryDetail() {
               <Calendar className="w-4 h-4" />
               <span>{dateStr}</span>
             </div>
-            {measurement.customerName && (
+            {measurement.customer_name && (
               <div className="flex items-center gap-2 text-sm text-gray-300">
                 <User className="w-4 h-4 text-gray-500" />
-                <span>{measurement.customerName}</span>
+                <span>{measurement.customer_name}</span>
               </div>
             )}
             {measurement.notes && (
@@ -129,11 +147,11 @@ export default function HistoryDetail() {
             <div className="flex items-center gap-2 text-sm text-gray-400">
               <span className="text-gray-500">用紙:</span>
               <span className="text-purple-400 font-medium">
-                {(measurement as {paperType?: string}).paperType ?? 'A4'}
+                {measurement.paper_type ?? 'A4'}
               </span>
-              {(measurement as {insolePaperType?: string}).insolePaperType && (
+              {measurement.insole_paper_type && (
                 <span className="text-gray-500 text-xs">
-                  (中敷き: {(measurement as {insolePaperType?: string}).insolePaperType})
+                  (中敷き: {measurement.insole_paper_type})
                 </span>
               )}
             </div>
@@ -150,12 +168,12 @@ export default function HistoryDetail() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-3">
-              <ResultItem label="左足長" value={measurement.leftFootLength} unit="mm" color="yellow" />
-              <ResultItem label="右足長" value={measurement.rightFootLength} unit="mm" color="yellow" />
-              <ResultItem label="左足幅" value={measurement.leftFootWidth} unit="mm" color="red" />
-              <ResultItem label="右足幅" value={measurement.rightFootWidth} unit="mm" color="red" />
-              <ResultItem label="左かかと〜MP" value={measurement.leftHeelToMp} unit="mm" />
-              <ResultItem label="右かかと〜MP" value={measurement.rightHeelToMp} unit="mm" />
+              <ResultItem label="左足長" value={measurement.left_foot_length} unit="mm" color="yellow" />
+              <ResultItem label="右足長" value={measurement.right_foot_length} unit="mm" color="yellow" />
+              <ResultItem label="左足幅" value={measurement.left_foot_width} unit="mm" color="red" />
+              <ResultItem label="右足幅" value={measurement.right_foot_width} unit="mm" color="red" />
+              <ResultItem label="左かかと〜MP" value={measurement.left_heel_to_mp} unit="mm" />
+              <ResultItem label="右かかと〜MP" value={measurement.right_heel_to_mp} unit="mm" />
             </div>
           </CardContent>
         </Card>
@@ -169,8 +187,8 @@ export default function HistoryDetail() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {measurement.insoleLength != null ? (
-              <ResultItem label="中敷き Length" value={measurement.insoleLength} unit="mm" color="teal" />
+            {measurement.insole_length != null ? (
+              <ResultItem label="中敷き Length" value={measurement.insole_length} unit="mm" color="teal" />
             ) : (
               <p className="text-gray-500 text-sm">なし</p>
             )}
@@ -214,16 +232,16 @@ export default function HistoryDetail() {
         )}
 
         {/* Image with measurement overlay */}
-        {measurement.imageUrl && points && measurement.imageWidth && measurement.imageHeight && (
+        {measurement.image_url && points && measurement.image_width && measurement.image_height && (
           <Card className="bg-gray-900 border-gray-800 overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-white text-sm">計測画像</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <MeasurementWidget
-                imageUrl={measurement.imageUrl}
-                imageWidth={measurement.imageWidth}
-                imageHeight={measurement.imageHeight}
+                imageUrl={measurement.image_url}
+                imageWidth={measurement.image_width}
+                imageHeight={measurement.image_height}
                 points={points}
                 onPointsChange={() => {}}
                 readOnly
@@ -233,25 +251,25 @@ export default function HistoryDetail() {
         )}
 
         {/* 中敷き画像 */}
-        {measurement.insoleImageUrl && (
+        {measurement.insole_image_url && (
           <Card className="bg-gray-900 border-gray-800 overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-white text-sm">中敷き画像</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {measurement.insoleImageUrl && measurement.insolePointsJson && measurement.insoleImageWidth && measurement.insoleImageHeight ? (
+              {measurement.insole_image_url && measurement.insole_points_json && measurement.insole_image_width && measurement.insole_image_height ? (
                 <MeasurementWidget
-                  imageUrl={measurement.insoleImageUrl}
-                  imageWidth={measurement.insoleImageWidth}
-                  imageHeight={measurement.insoleImageHeight}
-                  points={measurement.insolePointsJson as MeasurementPoints}
+                  imageUrl={measurement.insole_image_url}
+                  imageWidth={measurement.insole_image_width}
+                  imageHeight={measurement.insole_image_height}
+                  points={measurement.insole_points_json as unknown as MeasurementPoints}
                   onPointsChange={() => {}}
                   readOnly
                   mode={"insole" as MeasurementMode}
                 />
               ) : (
                 <img
-                  src={measurement.insoleImageUrl}
+                  src={measurement.insole_image_url}
                   alt="中敷き画像"
                   className="w-full object-contain"
                 />
@@ -261,14 +279,14 @@ export default function HistoryDetail() {
         )}
 
         {/* Image only (no points) */}
-        {measurement.imageUrl && !points && (
+        {measurement.image_url && !points && (
           <Card className="bg-gray-900 border-gray-800 overflow-hidden">
             <CardHeader className="pb-2">
               <CardTitle className="text-white text-sm">計測画像</CardTitle>
             </CardHeader>
             <CardContent className="p-0">
               <img
-                src={measurement.imageUrl}
+                src={measurement.image_url}
                 alt="計測画像"
                 className="w-full object-contain"
               />

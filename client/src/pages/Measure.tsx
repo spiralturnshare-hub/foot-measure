@@ -18,7 +18,16 @@
 
 import React, { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation, useSearch } from "wouter";
-import { trpc } from "@/lib/trpc";
+import {
+  createMeasurement,
+  uploadMeasurementImage,
+  uploadInsoleImage as uploadInsoleImageToStorage,
+  calculateAndSaveMeasurement,
+  saveInsoleResult as saveInsoleResultToDb,
+  fetchMeasurementById,
+  type FootMeasurementRow,
+} from "@/lib/supabase";
+import { useAuth } from "@/contexts/AuthContext";
 import { useOfflineMode } from "@/contexts/OfflineModeContext";
 import { FootConditionPanel, defaultFootCondition, isFootConditionComplete } from "@/components/FootConditionPanel";
 import type { FootConditionState } from "@/components/FootConditionPanel";
@@ -337,15 +346,19 @@ export default function Measure() {
   const [, navigate] = useLocation();
   const search = useSearch();
   const { isOfflineMode } = useOfflineMode();
+  const { user } = useAuth();
 
   // ---- すべてはhooksを早期返りより前に定義 -----
   const [step, setStep] = useState<Step>("upload");
-  // URLパラメータからの顧客・組織情報取得（customer-mgmt-consoleからのアクセス対応）
-  const { customerId, organizationId } = useMemo(() => {
+  // URLパラメータからの顧客・組織・アップロード・注文情報取得
+  // （customer-mgmt-console/upload-centerからのアクセス対応。uploadId/orderIdはproduction_workflows連携に使用）
+  const { customerId, organizationId, uploadId, orderId } = useMemo(() => {
     const params = new URLSearchParams(search);
     return {
       customerId: params.get('customerId') ?? undefined,
       organizationId: params.get('organizationId') ?? undefined,
+      uploadId: params.get('uploadId') ?? undefined,
+      orderId: params.get('orderId') ?? undefined,
     };
   }, [search]);
   const [measurementId, setMeasurementId] = useState<string | null>(null);
@@ -481,13 +494,10 @@ export default function Measure() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  // tRPC mutations
-  const createMutation = trpc.measurements.create.useMutation();
-  const uploadMutation = trpc.measurements.uploadImage.useMutation();
-  const calculateMutation = trpc.measurements.calculate.useMutation();
-  const savePointsMutation = trpc.measurements.saveBothPoints.useMutation();
-  const uploadInsoleMutation = trpc.measurements.uploadInsoleImage.useMutation();
-  const saveInsoleResultMutation = trpc.measurements.saveInsoleResult.useMutation();
+  // Supabase呼び出しの進行状態（旧tRPC mutationのisPending相当）
+  const [isCreating, setIsCreating] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isCalculating, setIsCalculating] = useState(false);
 
   // 再調整機能: URLクエリパラメータ ?readjust=<id> から履歴を復元
   const readjustId = (() => {
@@ -495,38 +505,50 @@ export default function Measure() {
     const v = params.get('readjust');
     return v ?? null;
   })();
-  const { data: readjustData } = trpc.measurements.getById.useQuery(
-    { id: readjustId ?? '00000000-0000-0000-0000-000000000000' },
-    { enabled: readjustId != null && readjustId.length > 0 }
-  );
+  const [readjustData, setReadjustData] = useState<FootMeasurementRow | null>(null);
+  useEffect(() => {
+    if (!readjustId) {
+      setReadjustData(null);
+      return;
+    }
+    let cancelled = false;
+    fetchMeasurementById(readjustId).then((data) => {
+      if (!cancelled) setReadjustData(data);
+    }).catch((err) => {
+      console.error(err);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [readjustId]);
 
   // 再調整データが取得できたら状態を復元する
   useEffect(() => {
     if (!readjustData) return;
     const m = readjustData;
-    if (!m.imageUrl || !m.imageWidth || !m.imageHeight) return;
+    if (!m.image_url || !m.image_width || !m.image_height) return;
 
     setMeasurementId(m.id);
-    setImageUrl(m.imageUrl);
-    setImageWidth(m.imageWidth);
-    setImageHeight(m.imageHeight);
-    setCustomerName(m.customerName ?? '');
+    setImageUrl(m.image_url);
+    setImageWidth(m.image_width);
+    setImageHeight(m.image_height);
+    setCustomerName(m.customer_name ?? '');
     setNotes(m.notes ?? '');
-    setInsoleSize(m.insoleSize ?? '');
-    setShoeSize(m.shoeSize ?? '');
-    setShoeBrand(m.shoeBrand ?? '');
-    setShippingAddress(m.shippingAddress ?? '');
-    setRoomShoeColor(m.roomShoeColor ?? '');
-    setSpaShoeColor(m.spaShoeColor ?? '');
-    // 元の計測日を設定（createdAtがあればそれを使用）
-    if (m.createdAt) setMeasureDate(new Date(m.createdAt));
+    setInsoleSize(m.insole_size ?? '');
+    setShoeSize(m.shoe_size ?? '');
+    setShoeBrand(m.shoe_brand ?? '');
+    setShippingAddress(m.shipping_address ?? '');
+    setRoomShoeColor(m.room_shoe_color ?? '');
+    setSpaShoeColor(m.spa_shoe_color ?? '');
+    // 元の計測日を設定（created_atがあればそれを使用）
+    if (m.created_at) setMeasureDate(new Date(m.created_at));
     setStandardResult(null);
     setBunionResult(null);
     setRegressionResult(null);
 
-    // pointsJsonから座標データを復元
-    const pj = m.pointsJson as { standard?: MeasurementPoints; bunion?: MeasurementPoints } | MeasurementPoints | null;
-    const defaults = getDefaultPoints(m.imageWidth, m.imageHeight);
+    // points_jsonから座標データを復元
+    const pj = m.points_json as { standard?: MeasurementPoints; bunion?: MeasurementPoints } | MeasurementPoints | null;
+    const defaults = getDefaultPoints(m.image_width, m.image_height);
     if (pj && 'standard' in pj && pj.standard) {
       setStandardPoints(pj.standard as MeasurementPoints);
     } else if (pj && 'point1' in pj) {
@@ -542,18 +564,18 @@ export default function Measure() {
     }
 
     // 中敷き画像・座標データを復元
-    if (m.insoleImageUrl && m.insoleImageWidth && m.insoleImageHeight) {
-      setInsoleImageUrl(m.insoleImageUrl);
-      setInsoleImageWidth(m.insoleImageWidth);
-      setInsoleImageHeight(m.insoleImageHeight);
+    if (m.insole_image_url && m.insole_image_width && m.insole_image_height) {
+      setInsoleImageUrl(m.insole_image_url);
+      setInsoleImageWidth(m.insole_image_width);
+      setInsoleImageHeight(m.insole_image_height);
       setInsoleImageRotation(0);
-      // insolePointsJsonから座標を復元
-      if (m.insolePointsJson) {
-        setInsolePoints(m.insolePointsJson as MeasurementPoints);
+      // insole_points_jsonから座標を復元
+      if (m.insole_points_json) {
+        setInsolePoints(m.insole_points_json as unknown as MeasurementPoints);
       } else {
-        setInsolePoints(getDefaultPoints(m.insoleImageWidth, m.insoleImageHeight));
+        setInsolePoints(getDefaultPoints(m.insole_image_width, m.insole_image_height));
       }
-      if (m.insoleLength != null) setInsoleLength(m.insoleLength);
+      if (m.insole_length != null) setInsoleLength(m.insole_length);
     } else {
       // 中敷き画像がない場合はリセット
       setInsoleImageUrl(null);
@@ -565,20 +587,20 @@ export default function Measure() {
 
     // 足の状態評価を復元
     if (
-      m.halluxValgusLeft != null ||
-      m.halluxValgusRight != null ||
-      m.quintusToeLeft != null ||
-      m.quintusToeRight != null ||
-      m.clawToeLeft != null ||
-      m.clawToeRight != null
+      m.hallux_valgus_left != null ||
+      m.hallux_valgus_right != null ||
+      m.quintus_toe_left != null ||
+      m.quintus_toe_right != null ||
+      m.claw_toe_left != null ||
+      m.claw_toe_right != null
     ) {
       setFootCondition({
-        halluxValgusLeft: m.halluxValgusLeft ?? -1,
-        halluxValgusRight: m.halluxValgusRight ?? -1,
-        quintusToeLeft: m.quintusToeLeft ?? -1,
-        quintusToeRight: m.quintusToeRight ?? -1,
-        clawToeLeft: m.clawToeLeft ?? -1,
-        clawToeRight: m.clawToeRight ?? -1,
+        halluxValgusLeft: m.hallux_valgus_left ?? -1,
+        halluxValgusRight: m.hallux_valgus_right ?? -1,
+        quintusToeLeft: m.quintus_toe_left ?? -1,
+        quintusToeRight: m.quintus_toe_right ?? -1,
+        clawToeLeft: m.claw_toe_left ?? -1,
+        clawToeRight: m.claw_toe_right ?? -1,
       });
     } else {
       setFootCondition(defaultFootCondition);
@@ -672,9 +694,12 @@ export default function Measure() {
           // オンラインモード: バックグラウンドでアップロードを実行（UIをブロックしない）
           const runUpload = async () => {
             try {
-              const { id } = await createMutation.mutateAsync({
+              setIsCreating(true);
+              const { id } = await createMeasurement({
                 customerId: customerId,
                 organizationId: organizationId,
+                uploadId: uploadId,
+                orderId: orderId,
                 customerName: customerName || undefined,
                 notes: notes || undefined,
                 insoleSize: insoleSize || undefined,
@@ -685,20 +710,17 @@ export default function Measure() {
                 spaShoeColor: spaShoeColor || undefined,
               });
               setMeasurementId(id);
+              setIsCreating(false);
 
               // 元画像をそのままアップロード（低解像度補正は行わない）
-              const base64 = dataUrl.split(",")[1];
-              await uploadMutation.mutateAsync({
-                id,
-                imageBase64: base64,
-                mimeType: file.type || 'image/jpeg',
-                imageWidth: w,
-                imageHeight: h,
-              });
-
+              setIsUploading(true);
+              await uploadMeasurementImage(id, file, w, h);
             } catch (err) {
               console.error(err);
               toast.error("アップロードに失敗しました");
+            } finally {
+              setIsCreating(false);
+              setIsUploading(false);
             }
           };
           // requestIdleCallbackでアイドル時に実行（ブラウザが対応していない場合はsetTimeoutで代替）
@@ -712,7 +734,7 @@ export default function Measure() {
       };
       reader.readAsDataURL(file);
     },
-    [createMutation, uploadMutation, customerName, notes, insoleSize, shoeSize, shoeBrand, shippingAddress, roomShoeColor, spaShoeColor]
+    [customerId, organizationId, uploadId, orderId, customerName, notes, insoleSize, shoeSize, shoeBrand, shippingAddress, roomShoeColor, spaShoeColor]
   );
 
   const handleDrop = useCallback(
@@ -745,14 +767,7 @@ export default function Measure() {
           // バックグラウンドでアップロード
           if (measurementId) {
             try {
-              const base64 = dataUrl.split(",")[1];
-              await uploadInsoleMutation.mutateAsync({
-                id: measurementId,
-                imageBase64: base64,
-                mimeType: file.type || 'image/jpeg',
-                imageWidth: w,
-                imageHeight: h,
-              });
+              await uploadInsoleImageToStorage(measurementId, file, w, h);
             } catch (err) {
               console.error(err);
               toast.error("中敷き画像のアップロードに失敗しました");
@@ -763,7 +778,7 @@ export default function Measure() {
       };
       reader.readAsDataURL(file);
     },
-    [measurementId, uploadInsoleMutation]
+    [measurementId]
   );
 
 
@@ -825,20 +840,24 @@ export default function Measure() {
       return;
     }
 
-    // オンラインモード: サーバーに保存
+    // オンラインモード: Supabaseに保存
     try {
-      // calculateMutationに両モードの点を渡す（一回の保存で { standard, bunion } 形式に統一）
-      await calculateMutation.mutateAsync({
+      setIsCalculating(true);
+      // calculateAndSaveMeasurementに両モードの点を渡す（一回の保存で { standard, bunion } 形式に統一）
+      await calculateAndSaveMeasurement({
         id: measurementId!,
         result: resultForSave,
         standardPoints: standardPoints ?? undefined,
         bunionPoints: bunionPoints ?? undefined,
         footCondition: footCondition,
         paperType: paperType,
+        uploadId: uploadId ?? null,
+        orderId: orderId ?? null,
+        operatorAuthUserId: user?.id ?? null,
       });
       // 中敏き計測結果を保存（中敏き画像がある場合のみ）
       if (insolePoints && insoleImageWidth > 0) {
-        await saveInsoleResultMutation.mutateAsync({
+        await saveInsoleResultToDb({
           id: measurementId!,
           insolePoints: insolePoints,
           insoleLength: newInsoleLength,
@@ -849,6 +868,8 @@ export default function Measure() {
       // toast.success("計測が完了しました"); // 非表示
     } catch {
       toast.error("保存に失敗しました");
+    } finally {
+      setIsCalculating(false);
     }
   }, [measurementId,
     isOfflineMode,
@@ -866,8 +887,9 @@ export default function Measure() {
     insoleA4Orientation,
     imageWidth,
     imageHeight,
-    calculateMutation,
-    saveInsoleResultMutation,
+    uploadId,
+    orderId,
+    user,
   ]);
 
   // ---- リセット（現在のモードのみ、ただし基準点は他方にも反映） ----
@@ -907,10 +929,7 @@ export default function Measure() {
     }
   }, [measureMode]);
 
-  const isLoading =
-    createMutation.isPending ||
-    uploadMutation.isPending ||
-    calculateMutation.isPending;
+  const isLoading = isCreating || isUploading || isCalculating;
 
   // 計測前確認ダイアログの表示制御
   const [showMeasureConfirm, setShowMeasureConfirm] = useState(false);
@@ -1451,9 +1470,9 @@ export default function Measure() {
                 size="sm"
                 className="bg-blue-600 hover:bg-blue-700 text-xs h-9 px-3"
                 onClick={handleCalculateClick}
-                disabled={calculateMutation.isPending}
+                disabled={isCalculating}
               >
-                {calculateMutation.isPending ? (
+                {isCalculating ? (
                   <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
                 ) : (
                   <Calculator className="w-3.5 h-3.5 mr-1" />
@@ -1823,9 +1842,9 @@ export default function Measure() {
                 size="sm"
                 className="w-full justify-center bg-blue-600 hover:bg-blue-700 text-sm h-10 px-3 font-semibold"
                 onClick={handleCalculateClick}
-                disabled={calculateMutation.isPending}
+                disabled={isCalculating}
               >
-                {calculateMutation.isPending
+                {isCalculating
                   ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   : <Calculator className="w-4 h-4 mr-2" />}
                 計測する

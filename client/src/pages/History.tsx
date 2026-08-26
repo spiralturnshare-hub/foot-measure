@@ -4,9 +4,9 @@
  * オフラインモード: 一時的な計測のため履歴なし
  */
 
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { fetchMeasurements, deleteMeasurement, type FootMeasurementRow } from "@/lib/supabase";
 import { useOfflineMode } from "@/contexts/OfflineModeContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -30,22 +30,47 @@ export default function History() {
   const [search, setSearch] = useState("");
   const { isOfflineMode } = useOfflineMode();
 
-  // オンラインモード: サーバーDBから取得
-  const { data: measurements, isLoading: isOnlineLoading, refetch } = trpc.measurements.list.useQuery(
-    undefined,
-    { enabled: !isOfflineMode }
-  );
+  // オンラインモード: Supabaseから取得
+  const [measurements, setMeasurements] = useState<FootMeasurementRow[] | undefined>(undefined);
+  const [isOnlineLoading, setIsOnlineLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  const deleteMutation = trpc.measurements.delete.useMutation({
-    onSuccess: () => {
-      refetch();
+  const refetch = useCallback(async () => {
+    if (isOfflineMode) return;
+    setIsOnlineLoading(true);
+    try {
+      const data = await fetchMeasurements();
+      setMeasurements(data);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsOnlineLoading(false);
+    }
+  }, [isOfflineMode]);
+
+  useEffect(() => {
+    void refetch();
+  }, [refetch]);
+
+  const handleDelete = useCallback(
+    async (id: string) => {
+      setIsDeleting(true);
+      try {
+        await deleteMeasurement(id);
+        await refetch();
+      } catch (err) {
+        console.error(err);
+        toast.error("削除に失敗しました");
+      } finally {
+        setIsDeleting(false);
+      }
     },
-    onError: () => toast.error("削除に失敗しました"),
-  });
+    [refetch]
+  );
 
   const filtered = (measurements ?? []).filter((m) => {
     if (!search) return true;
-    return m.customerName?.toLowerCase().includes(search.toLowerCase());
+    return m.customer_name?.toLowerCase().includes(search.toLowerCase());
   });
 
   return (
@@ -134,8 +159,9 @@ export default function History() {
               onView={() => navigate(`/history/${m.id}`)}
               onReadjust={() => navigate(`/measure?readjust=${m.id}`)}
               onDelete={() => {
+                if (isDeleting) return;
                 if (confirm("この計測データを削除しますか？")) {
-                  deleteMutation.mutate({ id: m.id });
+                  void handleDelete(m.id);
                 }
               }}
             />
@@ -152,12 +178,12 @@ function MeasurementCard({
   onReadjust,
   onDelete,
 }: {
-  measurement: any;
+  measurement: FootMeasurementRow;
   onView: () => void;
   onReadjust: () => void;
   onDelete: () => void;
 }) {
-  const date = new Date(measurement.createdAt);
+  const date = new Date(measurement.created_at);
   const dateStr = date.toLocaleDateString("ja-JP", {
     year: "numeric",
     month: "short",
@@ -170,10 +196,10 @@ function MeasurementCard({
     <div className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
       <div className="flex items-stretch">
         {/* Image thumbnail */}
-        {measurement.imageUrl ? (
+        {measurement.image_url ? (
           <div className="w-20 flex-shrink-0">
             <img
-              src={measurement.imageUrl}
+              src={measurement.image_url}
               alt="計測画像"
               className="w-full h-full object-cover"
             />
@@ -189,9 +215,9 @@ function MeasurementCard({
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                {measurement.customerName ? (
+                {measurement.customer_name ? (
                   <span className="font-medium text-white text-sm truncate">
-                    {measurement.customerName}
+                    {measurement.customer_name}
                   </span>
                 ) : (
                   <span className="text-gray-500 text-sm">顧客名なし</span>
@@ -208,13 +234,13 @@ function MeasurementCard({
                 </Badge>
               </div>
               <p className="text-gray-500 text-xs">{dateStr}</p>
-              {measurement.leftFootLength && (
+              {measurement.left_foot_length && (
                 <div className="flex gap-3 mt-1">
                   <span className="text-yellow-400 text-xs">
-                    L: {measurement.leftFootLength?.toFixed(1)}mm
+                    L: {measurement.left_foot_length?.toFixed(1)}mm
                   </span>
                   <span className="text-yellow-400 text-xs">
-                    R: {measurement.rightFootLength?.toFixed(1)}mm
+                    R: {measurement.right_foot_length?.toFixed(1)}mm
                   </span>
                 </div>
               )}

@@ -1,4 +1,4 @@
-import { trpc } from "@/lib/trpc";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import {
   Ruler,
@@ -11,18 +11,35 @@ import {
   CloudOff,
 } from "lucide-react";
 import { useOfflineMode } from "@/contexts/OfflineModeContext";
+import { fetchMeasurements, type FootMeasurementRow } from "@/lib/supabase";
 import { toast } from "sonner";
 
 export default function Home() {
   const [, navigate] = useLocation();
   const { isOfflineMode, isNetworkOnline, toggleOfflineMode } = useOfflineMode();
 
-  // オンラインモード: サーバーから計測一覧を取得
-  const { data: onlineMeasurements, isLoading: onlineLoading } =
-    trpc.measurements.list.useQuery(undefined, {
-      enabled: !isOfflineMode,
-      retry: false,
-    });
+  // オンラインモード: Supabaseから計測一覧を取得
+  const [onlineMeasurements, setOnlineMeasurements] = useState<FootMeasurementRow[] | undefined>(undefined);
+  const [onlineLoading, setOnlineLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOfflineMode) return;
+    let cancelled = false;
+    setOnlineLoading(true);
+    fetchMeasurements()
+      .then((data) => {
+        if (!cancelled) setOnlineMeasurements(data);
+      })
+      .catch((err) => {
+        console.error(err);
+      })
+      .finally(() => {
+        if (!cancelled) setOnlineLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isOfflineMode]);
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
@@ -158,16 +175,16 @@ export default function Home() {
           ) : (
             <div className="space-y-2">
               {onlineMeasurements?.slice(0, 5).map((m) => {
-                const date = new Date(m.createdAt);
+                const date = new Date(m.created_at);
                 return (
                   <button
                     key={m.id}
                     className="w-full bg-gray-900 border border-gray-800 rounded-xl p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors text-left"
                     onClick={() => navigate(`/history/${m.id}`)}
                   >
-                    {m.imageUrl ? (
+                    {m.image_url ? (
                       <img
-                        src={m.imageUrl}
+                        src={m.image_url}
                         alt=""
                         className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
                       />
@@ -178,14 +195,14 @@ export default function Home() {
                     )}
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-white text-sm truncate">
-                        {m.customerName || "顧客名なし"}
+                        {m.customer_name || "顧客名なし"}
                       </p>
                       <p className="text-gray-500 text-xs">
                         {date.toLocaleDateString("ja-JP")}
                       </p>
-                      {m.leftFootLength && (
+                      {m.left_foot_length && (
                         <p className="text-yellow-400 text-xs">
-                          L: {m.leftFootLength.toFixed(1)}mm / R: {m.rightFootLength?.toFixed(1)}mm
+                          L: {m.left_foot_length.toFixed(1)}mm / R: {m.right_foot_length?.toFixed(1)}mm
                         </p>
                       )}
                     </div>
