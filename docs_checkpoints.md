@@ -49,7 +49,7 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - 内容: 本日、customer-mgmt-consoleの`upload_revisions`と同じ「上書き禁止・追記型」改訂履歴パターンを`foot_measurements`/`foot_analyses`にも適用するマイグレーション(`customer-mgmt-console/supabase_migrations/004_measurement_and_analysis_revision_history.sql`、本人が別途Supabaseで手動実行予定)に合わせて、`calculateAndSaveMeasurement`をRPC呼び出しに変更する作業に着手。
 
 ### CP4 (2026-08-27 calculateAndSaveMeasurementをRPC update_foot_measurement_with_history経由に変更)
-- コミット: (このコミットで記録。`git log --oneline -1`参照)
+- コミット: `35c5dae`
 - 内容: `client/src/lib/supabase.ts`の`calculateAndSaveMeasurement`を、`foot_measurements`への直接updateから、新設RPC`update_foot_measurement_with_history`(呼び出し前の行をfoot_measurement_revisionsへスナップショットしてから更新)の呼び出しに変更。渡すpatchの内容(points_json/flex_unit1_json/flex_unit2_json/left・right_foot_length/left・right_foot_width/left・right_heel_to_mp/regression_result_json/status/paper_type/footConditionの各列)は変更なし。`p_changed_by_type='staff'`固定、`p_changed_by_id`は`operatorAuthUserId`が渡された場合のみ`fetchCurrentMember`で解決(`markProductionWorkflowMeasureDone`と同じロジックを流用、無ければnull)、`p_change_reason`は固定文言。新規下書きの初回保存でもこのRPCで問題なく動作する(スナップショットが空の初期状態になるだけ)ため特別分岐は追加していない。
   - `npm run check`(tsc --noEmit)・`npm run build`(vite build)ともに成功を確認済み。
   - **範囲外(本人指定)**: customer-mgmt-console側(`saveDetectedSigns`/`completeFootAnalysis`のRPC化、顧客詳細画面への計測結果サマリー・測り直しボタン・変更履歴UI追加)は、このエージェントが`foot-measure`リポジトリ専用のworktreeに隔離されているため、この場では実施できず別途対応が必要(詳細はタスク完了報告を参照)。
