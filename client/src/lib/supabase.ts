@@ -286,6 +286,12 @@ export interface CalculateMeasurementInput {
  * applyRegressionは呼び出し側（Measure.tsx）で計算済みの結果を渡さず、
  * サーバー版routers.tsのcalculateプロシージャと同じタイミング（保存直前）で
  * このファイル内で算出する。
+ *
+ * 保存経路: 顧客データ改訂ポリシー（上書き禁止・追記型）に合わせ、直接updateではなく
+ * RPC update_foot_measurement_with_history 経由で保存する（呼び出し前の行を
+ * foot_measurement_revisionsへスナップショットしてから更新する設計）。
+ * 新規下書き（まだ一度もcalculateされていない真っさらな行）に対する初回保存でも、
+ * このRPCはそのまま使える（スナップショットが空の初期状態になるだけで問題ない）。
  */
 export async function calculateAndSaveMeasurement(
   input: CalculateMeasurementInput
@@ -315,7 +321,6 @@ export async function calculateAndSaveMeasurement(
     right_heel_to_mp: input.result.rightHeelToMp ?? null,
     regression_result_json: regressionResult,
     status: 'completed',
-    updated_at: new Date().toISOString(),
   };
   if (input.paperType) patch.paper_type = input.paperType;
   if (input.footCondition) {
@@ -327,17 +332,26 @@ export async function calculateAndSaveMeasurement(
     patch.claw_toe_right = input.footCondition.clawToeRight;
   }
 
-  const { error } = await supabase.from('foot_measurements').update(patch).eq('id', input.id);
+  // p_changed_by_id: markProductionWorkflowMeasureDoneと同じfetchCurrentMember経由の解決。
+  // operatorAuthUserIdが渡されている場合のみ解決し、無ければnullのまま（匿名/顧客操作など）。
+  let memberId: string | null = null;
+  if (input.operatorAuthUserId) {
+    const member = await fetchCurrentMember(input.operatorAuthUserId);
+    memberId = member?.id ?? null;
+  }
+
+  const { error } = await supabase.rpc('update_foot_measurement_with_history', {
+    p_measurement_id: input.id,
+    p_patch: patch,
+    p_changed_by_type: 'staff',
+    p_changed_by_id: memberId,
+    p_change_reason: '計測結果の保存(測り直し含む)',
+  });
   if (error) throw error;
 
   // upload_idが渡されている場合のみ production_workflows と連携する
   // （単体計測=customer_idのみの計測では対象のproduction_workflows行が存在しないためスキップ）
   if (input.uploadId) {
-    let memberId: string | null = null;
-    if (input.operatorAuthUserId) {
-      const member = await fetchCurrentMember(input.operatorAuthUserId);
-      memberId = member?.id ?? null;
-    }
     await markProductionWorkflowMeasureDone(input.uploadId, input.orderId ?? null, memberId, input.id);
   }
 
