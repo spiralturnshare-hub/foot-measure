@@ -53,3 +53,15 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - 内容: `client/src/lib/supabase.ts`の`calculateAndSaveMeasurement`を、`foot_measurements`への直接updateから、新設RPC`update_foot_measurement_with_history`(呼び出し前の行をfoot_measurement_revisionsへスナップショットしてから更新)の呼び出しに変更。渡すpatchの内容(points_json/flex_unit1_json/flex_unit2_json/left・right_foot_length/left・right_foot_width/left・right_heel_to_mp/regression_result_json/status/paper_type/footConditionの各列)は変更なし。`p_changed_by_type='staff'`固定、`p_changed_by_id`は`operatorAuthUserId`が渡された場合のみ`fetchCurrentMember`で解決(`markProductionWorkflowMeasureDone`と同じロジックを流用、無ければnull)、`p_change_reason`は固定文言。新規下書きの初回保存でもこのRPCで問題なく動作する(スナップショットが空の初期状態になるだけ)ため特別分岐は追加していない。
   - `npm run check`(tsc --noEmit)・`npm run build`(vite build)ともに成功を確認済み。
   - **範囲外(本人指定)**: customer-mgmt-console側(`saveDetectedSigns`/`completeFootAnalysis`のRPC化、顧客詳細画面への計測結果サマリー・測り直しボタン・変更履歴UI追加)は、このエージェントが`foot-measure`リポジトリ専用のworktreeに隔離されているため、この場では実施できず別途対応が必要(詳細はタスク完了報告を参照)。
+
+### CP5 (2026-08-28 認証をコード直接入力方式へ統一 / S2 の3本目)
+- コミット(着手前): `1d04a86`("docs: CP4にコミットハッシュを記録")
+- Vercel Production(着手前): `foot-measure-16028lw1y`(公開URL `https://foot-measure.vercel.app`)
+- 背景: dealer-insole-order(CP3)・dealer-mgmt-console(CP4)と同じ。メール内マジックリンクがモバイルで機能しない問題(アプリ内ブラウザにセッション隔離 / Gmail の URL 先読みでトークン消費)を、認証を持つ全アプリへ横展開する S2 の3本目。dealer-insole-order で実機ログイン確認済み。
+- 変更内容:
+  - `client/src/lib/supabase.ts`: `verifyOtpCode(email, token)` を新設(`supabase.auth.verifyOtp({ type: 'email' })`)。既存 `sendMagicLink` に `shouldCreateUser: false` を追加(**これまで未指定=true だった**。foot-measure は社内の足計測担当のみが使うため、事前登録済みメールに限定する)。`emailRedirectTo` は保険で残置。2026-08-28 失敗史の注釈を追加。
+  - `client/src/contexts/AuthContext.tsx`: `verifyOtpCode` を context に追加(`lib/supabase.ts` の関数を薄くラップ。既存 `sendMagicLink` と同じスタイルで throw する)。
+  - `client/src/pages/Login.tsx`: 「送信 → 完了画面」から「送信 → 確認コード入力 → verifyOtp」の2ステップへ。コード欄は数字のみ・桁数寛容(4〜10、Email OTP Length 設定に追従)。案内文を「メール記載のコードを入力。リンクは使わない」に変更。ダークテーマ・Ruler アイコンは踏襲。
+- DB/RLS への影響: なし(`verifyOtp` は RLS を通らない。migration 不要)。
+- ビルド: `npx vite build` 成功。`npx tsc --noEmit` = **エラー0件**(変更3ファイル含め全体クリーン)。
+- 戻し方: Vercel → foot-measure → Deployments で `16028lw1y`(着手前の本番)を Promote to Production。またはコミット `1d04a86` へ `git reset --hard`(要・複数回許可)。

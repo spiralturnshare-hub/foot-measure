@@ -36,15 +36,43 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
 });
 
 // ============================================================
-// 認証 - Magic Link
+// 認証 - 確認コード直接入力方式(2 ステップ: 送信 → コード入力)
+//
+// 【過去の失敗と対策 (2026-08-28 / upload-center で判明 → 全アプリへ横展開)】
+//   メール内「マジックリンク」をモバイルでタップする方式は使わない。理由:
+//     (1) メールアプリ(Gmail/LINE 等)のアプリ内ブラウザでリンクが開くと、
+//         セッションはその WebView の隔離 localStorage に入り、普段使う
+//         Safari/Chrome には共有されない → 本体ブラウザでは未ログインのまま。
+//     (2) Gmail 等がメール内 URL を安全スキャンで先読みし、使い捨てトークンを
+//         本人のタップ前に消費する(otp_expired)。
+//   → 対策: メール記載の「確認コード」を本体ブラウザで直接入力させ、
+//     verifyOtp({type:'email'}) で入力したブラウザにそのままセッションを張る。
+//   ※ Supabase の「Magic link or OTP」メールテンプレートに {{ .Token }} を
+//      表示させておくこと(プロジェクト共通テンプレートなので全アプリで共有)。
+//   ※ foot-measure は社内の足計測担当のみが使う。事前登録済み(system_members)
+//      のメールだけを通すため shouldCreateUser:false を指定する
+//      (未指定=true だと任意のメールで auth ユーザーが増える=不正ログインの入口)。
 // ============================================================
+
+/** ステップ1: 入力メールへ確認コードを送信する。 */
 export async function sendMagicLink(email: string): Promise<void> {
   const { error } = await supabase.auth.signInWithOtp({
     email,
     options: {
+      shouldCreateUser: false,
+      // コード入力方式では未使用。メール内リンクを踏まれた場合の戻り先として保険で残す。
       emailRedirectTo: `${window.location.origin}/`,
     },
   });
+  if (error) throw error;
+}
+
+/**
+ * ステップ2: メール記載の確認コードを検証し、このブラウザにセッションを張る。
+ * 成功すると onAuthStateChange が発火し、AuthGuard 側で isLoggedIn が true になる。
+ */
+export async function verifyOtpCode(email: string, token: string): Promise<void> {
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
   if (error) throw error;
 }
 

@@ -4,7 +4,7 @@
 // ============================================================
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
-import { supabase, sendMagicLink as sendMagicLinkFn, signOut as signOutFn } from '@/lib/supabase';
+import { supabase, sendMagicLink as sendMagicLinkFn, verifyOtpCode as verifyOtpCodeFn, signOut as signOutFn } from '@/lib/supabase';
 
 interface AuthContextValue {
   user: User | null;
@@ -12,6 +12,7 @@ interface AuthContextValue {
   loading: boolean;
   isLoggedIn: boolean;
   sendMagicLink: (email: string) => Promise<void>;
+  verifyOtpCode: (email: string, token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -44,6 +45,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await sendMagicLinkFn(email);
   };
 
+  const verifyOtpCode = async (email: string, token: string) => {
+    await verifyOtpCodeFn(email, token);
+  };
+
   const signOut = async () => {
     await signOutFn();
     setUser(null);
@@ -57,6 +62,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       isLoggedIn: !!session && !!user,
       sendMagicLink,
+      verifyOtpCode,
       signOut,
     }}>
       {children}

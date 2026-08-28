@@ -1,31 +1,64 @@
 // ============================================================
-// SPIRAL TURN - ログインページ（Magic Link認証）
+// SPIRAL TURN - ログインページ(確認コード直接入力方式)
 // foot-measure: 特定ユーザーのみアクセス可能
+//
+// 【方式 / 過去の失敗と対策 (2026-08-28)】
+//   以前はメールで届く「マジックリンク」をタップさせる方式だったが、モバイルで
+//   機能しないことが判明(アプリ内ブラウザにセッションが隔離される / Gmail の
+//   URL 先読みでトークンが消費される)。詳細は lib/supabase.ts の注釈参照。
+//   → 現在は「メール送信 → 画面で確認コードを入力 → verifyOtp」の2ステップ。
+//   接続先: Supabase Auth(Green fhamrkmsxidxayaoexso)。verifyOtp は RLS を通らない。
 // ============================================================
 import { useState } from 'react';
-import { Ruler, Loader2, Mail, CheckCircle } from 'lucide-react';
+import { Ruler, Loader2, Mail, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-export default function Login() {
-  const { sendMagicLink } = useAuth();
-  const [email, setEmail] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState(false);
+// 確認コードの許容桁数。Supabase の Email OTP Length 設定(既定6)に追従できるよう
+// 固定長にせず幅を持たせる。generate_link は現状8桁を返すことがある。
+const OTP_MIN_LEN = 4;
+const OTP_MAX_LEN = 10;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+export default function Login() {
+  const { sendMagicLink, verifyOtpCode } = useAuth();
+  const [step, setStep] = useState<'email' | 'code'>('email');
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) {
+    if (!email || !email.includes('@')) {
       toast.error('メールアドレスを入力してください');
       return;
     }
     setLoading(true);
     try {
       await sendMagicLink(email);
-      setSent(true);
+      setStep('code');
     } catch (err: unknown) {
+      // 実際の失敗理由を出す(例: "Signups not allowed for otp" = 未登録メール)
       const message = err instanceof Error ? err.message : 'エラーが発生しました';
-      toast.error(message);
+      toast.error(`確認コードを送信できませんでした: ${message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (code.length < OTP_MIN_LEN || code.length > OTP_MAX_LEN) {
+      toast.error('メールに記載された確認コードを入力してください');
+      return;
+    }
+    setLoading(true);
+    try {
+      await verifyOtpCode(email, code);
+      // 成功時は onAuthStateChange 経由で AuthGuard がアプリ本体へ切り替える
+    } catch (err: unknown) {
+      // expired = 期限切れ / invalid = コード誤り など
+      const message = err instanceof Error ? err.message : 'エラーが発生しました';
+      toast.error(`確認できませんでした: ${message}`);
     } finally {
       setLoading(false);
     }
@@ -46,25 +79,13 @@ export default function Login() {
         </div>
 
         <div className="bg-card rounded-2xl border border-border shadow-sm p-6">
-          {sent ? (
-            <div className="flex flex-col items-center text-center gap-3 py-4">
-              <CheckCircle size={40} className="text-green-500" />
-              <h2 className="text-lg font-semibold">メールを送信しました</h2>
-              <p className="text-sm text-muted-foreground">
-                <span className="font-medium">{email}</span> にログインリンクを送信しました。
-                メールを確認してリンクをクリックしてください。
-              </p>
-              <button
-                className="text-xs text-muted-foreground underline mt-2"
-                onClick={() => setSent(false)}
-              >
-                別のメールアドレスで試す
-              </button>
-            </div>
-          ) : (
+          {step === 'email' ? (
             <>
-              <h2 className="text-lg font-semibold mb-5">ログイン</h2>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <h2 className="text-lg font-semibold mb-1">ログイン</h2>
+              <p className="text-sm text-muted-foreground mb-5">
+                登録済みのメールアドレスに確認コードを送信します。パスワードは不要です。
+              </p>
+              <form onSubmit={handleSendCode} className="space-y-4">
                 <div className="space-y-1.5">
                   <label htmlFor="email" className="text-sm font-medium">
                     メールアドレス
@@ -79,6 +100,7 @@ export default function Login() {
                       onChange={(e) => setEmail(e.target.value)}
                       autoComplete="email"
                       disabled={loading}
+                      autoFocus
                       className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
                     />
                   </div>
@@ -94,9 +116,67 @@ export default function Login() {
                       送信中...
                     </>
                   ) : (
-                    'ログインリンクを送信'
+                    '確認コードを送信'
                   )}
                 </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold mb-1">確認コードを入力</h2>
+              <p className="text-sm text-muted-foreground mb-5">
+                <span className="font-medium text-foreground">{email}</span> に届いたメールに記載の
+                確認コードを、この画面に入力してください。
+                <span className="block mt-1 text-xs">
+                  メール内のリンクは使わないでください（スマホでは正しくログインできません）。
+                </span>
+              </p>
+              <form onSubmit={handleVerify} className="space-y-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="otp" className="text-sm font-medium">
+                    確認コード（メール記載）
+                  </label>
+                  <div className="relative">
+                    <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      id="otp"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      maxLength={OTP_MAX_LEN}
+                      placeholder="123456"
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                      disabled={loading}
+                      autoFocus
+                      className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-lg text-center font-mono tracking-widest focus:outline-none focus:ring-2 focus:ring-ring"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      確認中...
+                    </>
+                  ) : (
+                    '確認してサインイン'
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setStep('email'); setCode(''); }}
+                  className="w-full text-xs text-muted-foreground underline text-center"
+                >
+                  メールアドレスを変更する
+                </button>
+                <p className="text-xs text-muted-foreground text-center">
+                  コードが届かない場合は迷惑メールフォルダをご確認ください。
+                </p>
               </form>
             </>
           )}
