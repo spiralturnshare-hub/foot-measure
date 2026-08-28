@@ -9,14 +9,33 @@ import {
   Wifi,
   WifiOff,
   CloudOff,
+  LogOut,
 } from "lucide-react";
 import { useOfflineMode } from "@/contexts/OfflineModeContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { fetchMeasurements, type FootMeasurementRow } from "@/lib/supabase";
 import { toast } from "sonner";
 
 export default function Home() {
   const [, navigate] = useLocation();
   const { isOfflineMode, isNetworkOnline, toggleOfflineMode } = useOfflineMode();
+  // サインアウト: AuthContext.signOut → supabase.auth.signOut()。
+  // セッション破棄で onAuthStateChange が発火し、App.tsx の AuthGuard が
+  // 自動的に <Login /> を表示する(このコンポーネント側で画面遷移は不要)。
+  const { signOut, user } = useAuth();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut();
+      toast.info("サインアウトしました");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "エラーが発生しました";
+      toast.error(`サインアウトに失敗しました: ${message}`);
+      setSigningOut(false);
+    }
+  };
 
   // オンラインモード: Supabaseから計測一覧を取得
   const [onlineMeasurements, setOnlineMeasurements] = useState<FootMeasurementRow[] | undefined>(undefined);
@@ -80,6 +99,20 @@ export default function Home() {
               <span>オンライン</span>
             </>
           )}
+        </button>
+        {/* サインアウト */}
+        <button
+          onClick={handleSignOut}
+          disabled={signingOut}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-800 text-gray-300 border border-gray-700 hover:bg-gray-700 hover:text-white transition-all disabled:opacity-50"
+          title={user?.email ? `${user.email} をサインアウト` : "サインアウト"}
+        >
+          {signingOut ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <LogOut className="w-3.5 h-3.5" />
+          )}
+          <span className="hidden sm:inline">サインアウト</span>
         </button>
       </header>
 

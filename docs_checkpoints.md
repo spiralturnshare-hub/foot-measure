@@ -65,3 +65,11 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - DB/RLS への影響: なし(`verifyOtp` は RLS を通らない。migration 不要)。
 - ビルド: `npx vite build` 成功。`npx tsc --noEmit` = **エラー0件**(変更3ファイル含め全体クリーン)。
 - 戻し方: Vercel → foot-measure → Deployments で `16028lw1y`(着手前の本番)を Promote to Production。またはコミット `1d04a86` へ `git reset --hard`(要・複数回許可)。
+
+### CP6 (2026-08-28 ホーム画面にサインアウトボタンを追加)
+- コミット(着手前): CP5 の push 済みコミット `d7bc9a0`
+- 背景: これまで foot-measure にはサインアウト手段が UI 上に無かった(`AuthContext.signOut` は実装済みだが未接続)。冨永社長の依頼で追加。
+- 変更内容: `client/src/pages/Home.tsx` のヘッダー(オンライン/オフライン切替ボタンの隣)に「サインアウト」ボタンを追加。`useAuth().signOut()` を呼ぶだけ。セッション破棄 → `onAuthStateChange` 発火 → `App.tsx` の `AuthGuard` が自動的に `<Login />` を表示するため、画面遷移コードは持たない。処理中は spinner 表示、`title` にログイン中メールを出す。狭幅では文字ラベルを隠しアイコンのみ(`sm:inline`)。
+- DB/RLS への影響: なし。
+- ビルド: `npx vite build` 成功 / `tsc --noEmit` Home.tsx エラーなし。
+- 戻し方: この機能のみ戻すなら該当コミットを `git revert`。全体は CP5 と同じく `16028lw1y` を Promote。
