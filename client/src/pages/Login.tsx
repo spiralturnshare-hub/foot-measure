@@ -19,10 +19,12 @@ import { toast } from 'sonner';
 const OTP_MIN_LEN = 4;
 const OTP_MAX_LEN = 10;
 
-// 確認コード送信後のクールダウン秒数。
-// Supabase Auth は同一メール宛の確認コード再送を約10秒間ブロックする
-// (ホスティング版の固定値。ダッシュボードで変更不可)。この手前でボタンを止め、
-// 英語のレート制限エラーではなく日本語の案内を出すための猶予。10秒に少し足した値。
+// 送信ボタンの機械的ロック秒数(誤操作の二重クリック防止)。
+// Supabase Auth の同一メール宛の再送ブロックは実測で約30秒あり、それは
+// 案内文で「30秒ほどお待ちください」と伝える。ここは短め(12秒)にして
+// ボタンが固まって見える時間を抑える。ブロック中に押した場合は
+// エラー文言の "after N seconds" を読んでロックをその秒数まで延長する
+// (下の handleSendCode を参照)。
 const RESEND_COOLDOWN_SEC = 12;
 
 // Supabase の「送信頻度オーバー」エラーか判定する。
@@ -57,7 +59,7 @@ export default function Login() {
     }
     if (cooldown > 0) {
       // まだ Supabase の再送ブロック中。押しても失敗するので送らずに案内。
-      toast('確認コードを送信しました。もう一度送信する場合は10秒ほどお待ちください。');
+      toast('確認コードを送信しました。もう一度送信する場合は30秒ほどお待ちください。');
       return;
     }
     setLoading(true);
@@ -68,8 +70,11 @@ export default function Login() {
     } catch (err: unknown) {
       if (isSendRateLimitError(err)) {
         // 直前に送信済み(別タブ・別アプリ含む)。英語エラーは出さず日本語で待機を促す。
-        setCooldown(RESEND_COOLDOWN_SEC);
-        toast('確認コードを送信しました。もう一度送信する場合は10秒ほどお待ちください。');
+        // "after N seconds" があれば、その秒数(+余裕)までロックを延長する。
+        const retryMsg = err instanceof Error ? err.message : '';
+        const m = /after (\d+) seconds?/i.exec(retryMsg);
+        setCooldown(m ? Math.max(RESEND_COOLDOWN_SEC, parseInt(m[1], 10) + 3) : RESEND_COOLDOWN_SEC);
+        toast('確認コードを送信しました。もう一度送信する場合は30秒ほどお待ちください。');
       } else {
         // それ以外は実際の失敗理由を出す(例: "Signups not allowed for otp" = 未登録メール)
         const message = err instanceof Error ? err.message : 'エラーが発生しました';
@@ -158,7 +163,7 @@ export default function Login() {
                 </button>
                 {cooldown > 0 && (
                   <p className="text-xs text-muted-foreground text-center">
-                    確認コードを送信しました。もう一度送信する場合は10秒ほどお待ちください。
+                    確認コードを送信しました。もう一度送信する場合は30秒ほどお待ちください。
                   </p>
                 )}
               </form>
