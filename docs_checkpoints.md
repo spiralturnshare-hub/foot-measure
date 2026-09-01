@@ -73,3 +73,16 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - DB/RLS への影響: なし。
 - ビルド: `npx vite build` 成功 / `tsc --noEmit` Home.tsx エラーなし。
 - 戻し方: この機能のみ戻すなら該当コミットを `git revert`。全体は CP5 と同じく `16028lw1y` を Promote。
+
+### CP7 (2026-09-01 サインインの確認コード送信にクールダウンを追加)
+- コミット(着手前): `6e5d399`("feat: ホーム画面にサインアウトボタンを追加")
+- Vercel Production(着手前): `foot-measure-feod5cx1a`(公開URL `https://foot-measure.vercel.app`)
+- 背景: Supabase Auth は同一メール宛の確認コード再送を約10秒間ブロックする(ホスティング版の固定値・ダッシュボードで変更不可)。従来はこのとき英語のレート制限メッセージを toast でそのまま表示していたため、「別 Google アカウントで誤ログイン → すぐ正しいアカウントで送り直す」等の正当な操作でサインインできず混乱する。冨永社長の依頼で全アプリのサインイン画面に横展開(customer-mgmt-console CP17 と同一内容)。
+- 変更内容(`client/src/pages/Login.tsx` のみ):
+  - `cooldown`(残り秒数)state と 1秒ごとの減算 `useEffect` を追加。定数 `RESEND_COOLDOWN_SEC = 12`。
+  - `handleSendCode`: 送信成功時に `cooldown` を 12 にセット。`cooldown > 0` の間は送信せず「確認コードを送信しました。もう一度送信する場合は10秒ほどお待ちください。」を通常 toast で案内。
+  - 送信エラーを `isSendRateLimitError`(HTTP 429 か "after N seconds" 文言)で仕分け。レート制限なら英語を出さず上記の日本語案内 + `cooldown` セット。それ以外は従来どおり実エラー表示。
+  - メール入力ステップのボタン: `cooldown > 0` の間は無効化しラベルを「送信しました」に。ボタン下に同じ案内文を表示。数字カウントダウンは出さない(冨永社長の指定)。
+- DB/RLS への影響: なし(フロントの状態管理のみ)。
+- ビルド: `npx tsc --noEmit` = エラー0件 / `npx vite build` = 成功(2026-09-01 実行、PWA 再生成含む)。
+- 戻し方: Vercel → foot-measure → Deployments で `feod5cx1a`(着手前の本番)を Promote to Production。またはコミット `6e5d399` へ戻す(要・複数回許可)。
