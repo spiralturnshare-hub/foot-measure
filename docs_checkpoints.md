@@ -88,3 +88,12 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - デプロイ済み(2026-09-01): コミット `e060725` を push → `vercel deploy --prod` → `foot-measure-6v9li0smz`(本番)。公開URL 200 確認。
 - 案内文言(2026-09-01 冨永社長修正、2回): (1)「待つ=コード到着まで」と誤読されないよう「もう一度送信する場合は」を明示。(2)実測で約30秒必要 → **「確認コードを送信しました。もう一度送信する場合は30秒ほどお待ちください。」**。ボタンロックは12秒のまま + `after N seconds` で自動延長。
 - 戻し方: Vercel → foot-measure → Deployments で `feod5cx1a`(着手前の本番)を Promote to Production。またはコミット `6e5d399` へ戻す(要・複数回許可)。
+
+---
+
+## 2026-09-04: Legacy anon JWT → 新 publishable キー(docs/35 WS-B / docs/36)
+
+- 変更前 HEAD: `0b7adbb` / Vercel Production: https://foot-measure.vercel.app
+- `client/src/lib/supabase.ts`: ハードコード fallback(旧 anon JWT)撤去 → env 必須(未設定なら throw)
+- Vercel env `VITE_SUPABASE_ANON_KEY` を `sb_publishable_...` に差し替え済み(Production ほか)
+- 巻き戻し: この commit を revert + Vercel env を旧 anon JWT に戻す

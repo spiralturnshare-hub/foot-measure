@@ -24,8 +24,18 @@ type MeasurementPointsWithFlex = MeasurementPoints & {
   flexUnit2?: FlexUnitState;
 };
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL ?? 'https://fhamrkmsxidxayaoexso.supabase.co';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZoYW1ya21zeGlkeGF5YW9leHNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ2OTcwMTMsImV4cCI6MjEwMDI3MzAxM30.7GRn0m2SO3BzNQLQAb8dbREpoC8ewSIMLU2gWMIHp5I';
+// 2026-09-04: Legacy anon JWT のハードコード fallback を撤去(docs/35 WS-B / docs/36 §2)。
+//   Green の Legacy JWT Secret 露出の是正で新 API キー体系へ移行。旧 anon JWT をソース・git 履歴に残さない。
+//   env 未設定なら即エラー(静かに旧キーで動くより気づける)。VITE_SUPABASE_ANON_KEY = 新 publishable キー。
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  throw new Error(
+    'VITE_SUPABASE_URL と VITE_SUPABASE_ANON_KEY を環境変数(Vercel)に設定してください。' +
+      'VITE_SUPABASE_ANON_KEY = 新 publishable キー(sb_publishable_...)。',
+  );
+}
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
