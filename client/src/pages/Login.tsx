@@ -13,6 +13,7 @@ import { useEffect, useState } from 'react';
 import { Ruler, Loader2, Mail, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import Turnstile, { turnstileEnabled } from '@/components/Turnstile';
 
 // 確認コードの許容桁数。Supabase の Email OTP Length 設定(既定6)に追従できるよう
 // 固定長にせず幅を持たせる。generate_link は現状8桁を返すことがある。
@@ -44,6 +45,10 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   // > 0 の間は再送不可(残り秒数)。1秒ごとに減算し 0 で解除。
   const [cooldown, setCooldown] = useState(0);
+  // Green Supabase Auth の captcha protection(2026-09-10)対応。Turnstile トークンは
+  // 1回使い切りなので、送信のたびに captchaKey を +1 してウィジェットを再マウントする。
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaKey, setCaptchaKey] = useState(0);
 
   useEffect(() => {
     if (cooldown <= 0) return;
@@ -62,12 +67,19 @@ export default function Login() {
       toast('確認コードを送信しました。もう一度送信する場合は30秒ほどお待ちください。');
       return;
     }
+    if (turnstileEnabled && !captchaToken) {
+      toast.error('「私はロボットではありません」の確認を完了してください');
+      return;
+    }
     setLoading(true);
     try {
-      await sendMagicLink(email);
+      await sendMagicLink(email, captchaToken);
       setStep('code');
       setCooldown(RESEND_COOLDOWN_SEC);
     } catch (err: unknown) {
+      // 使い切ったトークンを破棄し、新しいチャレンジを出す
+      setCaptchaToken(null);
+      setCaptchaKey((k) => k + 1);
       if (isSendRateLimitError(err)) {
         // 直前に送信済み(別タブ・別アプリ含む)。英語エラーは出さず日本語で待機を促す。
         // "after N seconds" があれば、その秒数(+余裕)までロックを延長する。
@@ -145,9 +157,11 @@ export default function Login() {
                     />
                   </div>
                 </div>
+                {/* Cloudflare Turnstile(サイトキー未設定なら何も描画しない)。送信毎に再マウント。 */}
+                <Turnstile key={captchaKey} onToken={setCaptchaToken} />
                 <button
                   type="submit"
-                  disabled={loading || cooldown > 0}
+                  disabled={loading || cooldown > 0 || (turnstileEnabled && !captchaToken)}
                   className="w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {loading ? (

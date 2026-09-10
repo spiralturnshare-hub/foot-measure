@@ -32,6 +32,9 @@
     <meta name="apple-mobile-web-app-title" content="足計測" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon-192.png" />
+    <!-- Cloudflare Turnstile: Green Supabase Auth の captcha protection(2026-09-10 有効化)により
+         メールOTP送信に captchaToken が必須。window.turnstile を提供する。詳細 src/components/Turnstile.tsx -->
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   </head>
 
   <body>

@@ -11,7 +11,7 @@ interface AuthContextValue {
   session: Session | null;
   loading: boolean;
   isLoggedIn: boolean;
-  sendMagicLink: (email: string) => Promise<void>;
+  sendMagicLink: (email: string, captchaToken?: string | null) => Promise<void>;
   verifyOtpCode: (email: string, token: string) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -41,8 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const sendMagicLink = async (email: string) => {
-    await sendMagicLinkFn(email);
+  const sendMagicLink = async (email: string, captchaToken?: string | null) => {
+    await sendMagicLinkFn(email, captchaToken);
   };
 
   const verifyOtpCode = async (email: string, token: string) => {
