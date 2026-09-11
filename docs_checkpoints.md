@@ -97,3 +97,13 @@ git push --force-with-lease       # リモートも戻す(要事前確認・複�
 - `client/src/lib/supabase.ts`: ハードコード fallback(旧 anon JWT)撤去 → env 必須(未設定なら throw)
 - Vercel env `VITE_SUPABASE_ANON_KEY` を `sb_publishable_...` に差し替え済み(Production ほか)
 - 巻き戻し: この commit を revert + Vercel env を旧 anon JWT に戻す
+
+## 2026-09-11: メールログイン不能を修正 — Turnstile captchaToken を signInWithOtp に添付
+
+- 変更前 HEAD: `35eeec8` / Vercel Production: https://foot-measure.vercel.app
+- 症状・原因: 2026-09-10 の Green Supabase Auth の Captcha protection(Turnstile)有効化により `signInWithOtp`(メール)に `captchaToken` が必須化され、トークン未添付の本アプリのログインが `captcha protection: request disallowed` で全滅。
+- 修正: `client/src/components/Turnstile.tsx`(新規)/ `client/index.html` に Turnstile api.js / `lib/supabase.ts` + `contexts/AuthContext.tsx` の `sendMagicLink` に `captchaToken?` を透過 → `signInWithOtp` options に付与 / `Login` にウィジェット配置(トークン未取得なら送信不可・送信毎に再マウント・エラー時もトークン破棄)。
+- Vercel env(CLI で設定済み): Production に `VITE_TURNSTILE_SITE_KEY`(upload-center と同一・公開値)。
+- 前提: Cloudflare Turnstile ウィジェット `upload-center` の Hostname に `foot-measure.vercel.app` を追加済み(冨永社長・2026-09-11)。
+- ビルド: `npx vite build` 成功。コミット: `83e6ddf`(+ env 反映のため空コミット `2f9e9a6`)。
+- 戻し方: 2コミットを revert + Vercel env 削除。captcha protection が ON の間はログイン不能に戻る点に注意。
